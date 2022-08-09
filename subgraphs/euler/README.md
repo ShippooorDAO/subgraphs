@@ -28,7 +28,7 @@ Note: This currently excludes Liquidations
 
 Portion of the Total Revenue allocated to the Supply-Side
 
-Sum across all Markets, calculated every 50 blocks (~10min):
+Sum across all Markets, calculated every 257 blocks (~60min):
 
 `Cumulative supply-side revenue = Cumulative supply-side revenue + Market Supply APY * Market Deposits Balance`
 
