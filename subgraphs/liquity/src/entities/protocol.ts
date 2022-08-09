@@ -8,31 +8,43 @@ import {
   UsageMetricsHourlySnapshot,
 } from "../../generated/schema";
 import {
+  BIGDECIMAL_ZERO,
   LendingType,
   Network,
   ProtocolType,
+  PROTOCOL_METHODOLOGY_VERSION,
+  PROTOCOL_NAME,
+  PROTOCOL_SCHEMA_VERSION,
+  PROTOCOL_SLUG,
+  PROTOCOL_SUBGRAPH_VERSION,
   RiskType,
   SECONDS_PER_DAY,
   SECONDS_PER_HOUR,
   TROVE_MANAGER,
 } from "../utils/constants";
-import { getOrCreateMarket } from "./market";
+import {
+  getOrCreateMarket,
+  getOrCreateMarketHourlySnapshot,
+  getOrCreateMarketSnapshot,
+} from "./market";
 import { getLUSDToken } from "./token";
 
 export function getOrCreateLiquityProtocol(): LendingProtocol {
   let protocol = LendingProtocol.load(TROVE_MANAGER);
   if (!protocol) {
     protocol = new LendingProtocol(TROVE_MANAGER);
-    protocol.name = "Liquity";
-    protocol.slug = "liquity";
-    protocol.schemaVersion = "1.2.0";
-    protocol.subgraphVersion = "1.1.0";
-    protocol.methodologyVersion = "1.0.0";
+    protocol.name = PROTOCOL_NAME;
+    protocol.slug = PROTOCOL_SLUG;
+    protocol.schemaVersion = PROTOCOL_SCHEMA_VERSION;
+    protocol.subgraphVersion = PROTOCOL_SUBGRAPH_VERSION;
+    protocol.methodologyVersion = PROTOCOL_METHODOLOGY_VERSION;
     protocol.network = Network.MAINNET;
     protocol.type = ProtocolType.LENDING;
     protocol.lendingType = LendingType.CDP;
     protocol.riskType = RiskType.ISOLATED;
     protocol.mintedTokens = [getLUSDToken().id];
+
+    protocol.totalPoolCount = 1; // Only one active pool
     protocol.save();
   }
   return protocol;
@@ -49,6 +61,8 @@ export function getOrCreateUsageMetricsSnapshot(
     usageMetrics = new UsageMetricsDailySnapshot(id);
     usageMetrics.protocol = protocol.id;
     usageMetrics.cumulativeUniqueUsers = protocol.cumulativeUniqueUsers;
+
+    usageMetrics.totalPoolCount = protocol.totalPoolCount;
   }
   usageMetrics.blockNumber = event.block.number;
   usageMetrics.timestamp = event.block.timestamp;
@@ -59,9 +73,8 @@ export function getOrCreateUsageMetricsHourlySnapshot(
   event: ethereum.Event
 ): UsageMetricsHourlySnapshot {
   const timestamp = event.block.timestamp.toI64();
-  const day = timestamp / SECONDS_PER_DAY;
-  const hour = (timestamp % SECONDS_PER_DAY) / SECONDS_PER_HOUR;
-  const id = `${day}-${hour}`;
+  const hour = timestamp / SECONDS_PER_HOUR;
+  const id = `${hour}`;
   let usageMetrics = UsageMetricsHourlySnapshot.load(id);
   if (!usageMetrics) {
     const protocol = getOrCreateLiquityProtocol();
@@ -84,6 +97,9 @@ export function getOrCreateFinancialsSnapshot(
   if (!financialsSnapshot) {
     financialsSnapshot = new FinancialsDailySnapshot(id);
     financialsSnapshot.protocol = protocol.id;
+
+    financialsSnapshot.dailyWithdrawUSD = BIGDECIMAL_ZERO;
+    financialsSnapshot.dailyRepayUSD = BIGDECIMAL_ZERO;
   }
   financialsSnapshot.totalValueLockedUSD = protocol.totalValueLockedUSD;
   financialsSnapshot.mintedTokenSupplies = protocol.mintedTokenSupplies;
@@ -134,8 +150,8 @@ export function updateUsageMetrics(event: ethereum.Event, from: Address): void {
   }
   // Combine the id, user address and hour to generate a unique user id for the hour
   let hourlyActiveAccountId = `${accountId}-${day}-${hour}`;
-  let hourlyActiveAccount = ActiveAccount.load(dailyActiveAccountId);
-  if (!dailyActiveAccount) {
+  let hourlyActiveAccount = ActiveAccount.load(hourlyActiveAccountId);
+  if (!hourlyActiveAccount) {
     hourlyActiveAccount = new ActiveAccount(hourlyActiveAccountId);
     hourlyActiveAccount.save();
     usageMetricsHourlySnapshot.hourlyActiveUsers += 1;
@@ -154,12 +170,34 @@ export function addProtocolSideRevenue(
   protocol.cumulativeTotalRevenueUSD =
     protocol.cumulativeTotalRevenueUSD.plus(revenueAmountUSD);
   protocol.save();
+
   const financialsSnapshot = getOrCreateFinancialsSnapshot(event, protocol);
   financialsSnapshot.dailyProtocolSideRevenueUSD =
     financialsSnapshot.dailyProtocolSideRevenueUSD.plus(revenueAmountUSD);
   financialsSnapshot.dailyTotalRevenueUSD =
     financialsSnapshot.dailyTotalRevenueUSD.plus(revenueAmountUSD);
   financialsSnapshot.save();
+
+  const market = getOrCreateMarket();
+  market.cumulativeProtocolSideRevenueUSD =
+    market.cumulativeProtocolSideRevenueUSD.plus(revenueAmountUSD);
+  market.cumulativeTotalRevenueUSD =
+    market.cumulativeTotalRevenueUSD.plus(revenueAmountUSD);
+  market.save();
+
+  const marketDailySnapshot = getOrCreateMarketSnapshot(event, market);
+  marketDailySnapshot.dailyProtocolSideRevenueUSD =
+    marketDailySnapshot.dailyProtocolSideRevenueUSD.plus(revenueAmountUSD);
+  marketDailySnapshot.dailyTotalRevenueUSD =
+    marketDailySnapshot.dailyTotalRevenueUSD.plus(revenueAmountUSD);
+  marketDailySnapshot.save();
+
+  const marketHourlySnapshot = getOrCreateMarketHourlySnapshot(event, market);
+  marketHourlySnapshot.hourlyProtocolSideRevenueUSD =
+    marketHourlySnapshot.hourlyProtocolSideRevenueUSD.plus(revenueAmountUSD);
+  marketHourlySnapshot.hourlyTotalRevenueUSD =
+    marketHourlySnapshot.hourlyTotalRevenueUSD.plus(revenueAmountUSD);
+  marketHourlySnapshot.save();
 }
 
 export function addSupplySideRevenue(
@@ -172,12 +210,34 @@ export function addSupplySideRevenue(
   protocol.cumulativeTotalRevenueUSD =
     protocol.cumulativeTotalRevenueUSD.plus(revenueAmountUSD);
   protocol.save();
+
   const financialsSnapshot = getOrCreateFinancialsSnapshot(event, protocol);
   financialsSnapshot.dailySupplySideRevenueUSD =
     financialsSnapshot.dailySupplySideRevenueUSD.plus(revenueAmountUSD);
   financialsSnapshot.dailyTotalRevenueUSD =
     financialsSnapshot.dailyTotalRevenueUSD.plus(revenueAmountUSD);
   financialsSnapshot.save();
+
+  const market = getOrCreateMarket();
+  market.cumulativeSupplySideRevenueUSD =
+    market.cumulativeSupplySideRevenueUSD.plus(revenueAmountUSD);
+  market.cumulativeTotalRevenueUSD =
+    market.cumulativeTotalRevenueUSD.plus(revenueAmountUSD);
+  market.save();
+
+  const marketDailySnapshot = getOrCreateMarketSnapshot(event, market);
+  marketDailySnapshot.dailySupplySideRevenueUSD =
+    marketDailySnapshot.dailySupplySideRevenueUSD.plus(revenueAmountUSD);
+  marketDailySnapshot.dailyTotalRevenueUSD =
+    marketDailySnapshot.dailyTotalRevenueUSD.plus(revenueAmountUSD);
+  marketDailySnapshot.save();
+
+  const marketHourlySnapshot = getOrCreateMarketHourlySnapshot(event, market);
+  marketHourlySnapshot.hourlySupplySideRevenueUSD =
+    marketHourlySnapshot.hourlySupplySideRevenueUSD.plus(revenueAmountUSD);
+  marketHourlySnapshot.hourlyTotalRevenueUSD =
+    marketHourlySnapshot.hourlyTotalRevenueUSD.plus(revenueAmountUSD);
+  marketHourlySnapshot.save();
 }
 
 export function addProtocolBorrowVolume(
@@ -208,7 +268,7 @@ export function addProtocolDepositVolume(
 ): void {
   const protocol = getOrCreateLiquityProtocol();
   protocol.cumulativeDepositUSD =
-    protocol.cumulativeBorrowUSD.plus(depositedUSD);
+    protocol.cumulativeDepositUSD.plus(depositedUSD);
   protocol.save();
   const financialsSnapshot = getOrCreateFinancialsSnapshot(event, protocol);
   financialsSnapshot.dailyDepositUSD =

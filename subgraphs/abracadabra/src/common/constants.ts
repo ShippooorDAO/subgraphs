@@ -63,11 +63,19 @@ export namespace RiskType {
 export namespace InterestRateType {
   export const STABLE = "STABLE";
   export const VARIABLE = "VARIABLE";
-  export const FIXED_TERM = "FIXED_TERM";
+  export const FIXED_TERM = "FIXED";
 }
 export namespace InterestRateSide {
   export const LENDER = "LENDER";
   export const BORROW = "BORROWER";
+}
+export namespace EventType {
+  export const BORROW = "BORROW";
+  export const DEPOSIT = "DEPOSIT";
+  export const WITHDRAW = "WITHDRAW";
+  export const REPAY = "REPAY";
+  export const LIQUIDATEE = "LIQUIDATEE";
+  export const LIQUIDATOR = "LIQUIDATOR";
 }
 //////////////////////////////
 ///// Ethereum Addresses /////
@@ -133,6 +141,12 @@ export const BENTOBOX_ADDRESS_ARBITRUM = "0x74c764D41B77DBbb4fe771daB1939B00b146
 export const BENTOBOX_ADDRESS_FANTOM = "0xF5BCE5077908a1b7370B9ae04AdC565EBd643966".toLowerCase();
 export const BENTOBOX_ADDRESS_BSC = "0x090185f2135308BaD17527004364eBcC2D37e5F6".toLowerCase();
 
+export const DEGENBOX_ADDRESS_MAINNET = "0xd96f48665a1410C0cd669A88898ecA36B9Fc2cce".toLowerCase();
+export const DEGENBOX_ADDRESS_AVALANCHE = "0x1fC83f75499b7620d53757f0b01E2ae626aAE530".toLowerCase();
+export const DEGENBOX_ADDRESS_ARBITRUM = ZERO_ADDRESS;
+export const DEGENBOX_ADDRESS_FANTOM = "0x74A0BcA2eeEdf8883cb91E37e9ff49430f20a616".toLowerCase();
+export const DEGENBOX_ADDRESS_BSC = ZERO_ADDRESS;
+
 export const ABRA_ACCOUNTS = [
   // same on all chains
   "0xfddfe525054efaad204600d00ca86adb1cc2ea8a".toLowerCase(),
@@ -176,3 +190,7 @@ export const FTM_NETWORK = "fantom";
 export const ARB_NETWORK = "arbitrum-one";
 export const BSC_NETWORK = "bsc";
 export const AVALANCHE_NETWORK = "avalanche";
+
+export const schemaVersion = "2.0.1";
+export const subgraphVersion = "1.2.1";
+export const methodologyVersion = "1.0.0";

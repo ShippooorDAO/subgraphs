@@ -1,6 +1,7 @@
 generated/
 build/
 Reference/
+.vscode/
 
 **/.DS_Store
 
@@ -51,6 +52,9 @@ build/Release
 # Dependency directories
 node_modules/
 jspm_packages/
+
+# Text generating from running deployment scripts
+results.txt
 
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -138,3 +142,9 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# WebStorm cache
+.idea
+
+# Matchstick generated file
+.bin
