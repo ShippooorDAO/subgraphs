@@ -4,6 +4,7 @@ import {
   Deposit as DepositTransaction,
 } from "../../generated/schema";
 import {
+  getOrCreateYieldAggregator,
   getOrCreateUsageMetricsDailySnapshot,
   getOrCreateUsageMetricsHourlySnapshot,
 } from "../common/initializers";
@@ -19,7 +20,6 @@ import { getUsdPricePerToken } from "../Prices";
 import { getPriceOfOutputTokens } from "./Price";
 import * as constants from "../common/constants";
 import { Vault as VaultContract } from "../../generated/Registry_v1/Vault";
-
 
 export function createDepositTransaction(
   to: Address,
@@ -50,7 +50,7 @@ export function createDepositTransaction(
     depositTransaction.amount = amount;
     depositTransaction.amountUSD = amountUSD;
 
-    depositTransaction.timestamp = utils.getTimestampInMillis(block);
+    depositTransaction.timestamp = block.timestamp;
     depositTransaction.blockNumber = block.number;
 
     depositTransaction.save();
@@ -86,44 +86,72 @@ export function _Deposit(
   block: ethereum.Block,
   vault: VaultStore,
   sharesMinted: BigInt,
-  depositAmount: BigInt | null = null
+  depositAmount: BigInt
 ): void {
   const vaultAddress = Address.fromString(vault.id);
   const vaultContract = VaultContract.bind(vaultAddress);
+  const protocol = getOrCreateYieldAggregator();
 
-  if (!depositAmount) {
+  if (
+    depositAmount.toString() == "-1" ||
+    depositAmount.toString() == constants.MAX_UINT256_STR
+  ) {
     depositAmount = calculateAmountDeposited(vaultAddress, sharesMinted);
+
+    log.info(
+      "[Deposit_MAX_UINT] TxHash: {}, vaultAddress: {}, _sharesMinted: {}, _depositAmount: {}",
+      [
+        transaction.hash.toHexString(),
+        vault.id,
+        sharesMinted.toString(),
+        depositAmount.toString(),
+      ]
+    );
   }
-  
+
   let inputToken = Token.load(vault.inputToken);
   let inputTokenAddress = Address.fromString(vault.inputToken);
   let inputTokenPrice = getUsdPricePerToken(inputTokenAddress);
-  let inputTokenDecimals = constants.BIGINT_TEN.pow(inputToken!.decimals as u8);
+  let inputTokenDecimals = constants.BIGINT_TEN.pow(
+    inputToken!.decimals as u8
+  ).toBigDecimal();
 
-  vault.totalValueLockedUSD = inputTokenPrice.usdPrice
-    .times(vault.inputTokenBalance.toBigDecimal())
-    .div(inputTokenDecimals.toBigDecimal())
+  let depositAmountUSD = depositAmount
+    .toBigDecimal()
+    .div(inputTokenDecimals)
+    .times(inputTokenPrice.usdPrice)
     .div(inputTokenPrice.decimalsBaseTen);
 
-  vault.inputTokenBalance = vault.inputTokenBalance.plus(depositAmount);
-  vault.outputTokenSupply = vault.outputTokenSupply.plus(sharesMinted);
+  let totalSupply = utils.readValue<BigInt>(
+    vaultContract.try_totalSupply(),
+    constants.BIGINT_ZERO
+  );
+  vault.outputTokenSupply = totalSupply;
+
+  let totalAssets = utils.readValue<BigInt>(
+    vaultContract.try_totalAssets(),
+    constants.BIGINT_ZERO
+  );
+  vault.inputTokenBalance = totalAssets;
+
+  vault.totalValueLockedUSD = vault.inputTokenBalance
+    .toBigDecimal()
+    .div(inputTokenDecimals)
+    .times(inputTokenPrice.usdPrice)
+    .div(inputTokenPrice.decimalsBaseTen);
 
   vault.outputTokenPriceUSD = getPriceOfOutputTokens(
     vaultAddress,
     inputTokenAddress,
-    inputTokenDecimals.toBigDecimal()
+    inputTokenDecimals
   );
 
-  vault.pricePerShare = utils.readValue<BigInt>(
-    vaultContract.try_pricePerShare(),
-    constants.BIGINT_ZERO
-  ).toBigDecimal();
-  vault.save();
+  vault.pricePerShare = utils
+    .readValue<BigInt>(vaultContract.try_pricePerShare(), constants.BIGINT_ZERO)
+    .toBigDecimal();
+  vault.totalAssets = vault.totalAssets.plus(depositAmount);
 
-  let depositAmountUSD = inputTokenPrice.usdPrice
-    .times(depositAmount.toBigDecimal())
-    .div(inputTokenDecimals.toBigDecimal())
-    .div(inputTokenPrice.decimalsBaseTen);
+  vault.save();
 
   createDepositTransaction(
     to,
@@ -137,9 +165,7 @@ export function _Deposit(
 
   // Update hourly and daily deposit transaction count
   const metricsDailySnapshot = getOrCreateUsageMetricsDailySnapshot(block);
-  const metricsHourlySnapshot = getOrCreateUsageMetricsHourlySnapshot(
-    block
-  );
+  const metricsHourlySnapshot = getOrCreateUsageMetricsHourlySnapshot(block);
 
   metricsDailySnapshot.dailyDepositCount += 1;
   metricsHourlySnapshot.hourlyDepositCount += 1;
@@ -147,6 +173,9 @@ export function _Deposit(
   metricsDailySnapshot.save();
   metricsHourlySnapshot.save();
 
+  protocol.save();
+
+  utils.updateProtocolTotalValueLockedUSD();
   log.info(
     "[Deposit] TxHash: {}, vaultAddress: {}, _sharesMinted: {}, _depositAmount: {}",
     [

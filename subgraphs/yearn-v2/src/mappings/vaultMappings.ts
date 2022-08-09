@@ -1,3 +1,4 @@
+import * as utils from "../common/utils";
 import * as constants from "../common/constants";
 import { BigInt, log } from "@graphprotocol/graph-ts";
 import {
@@ -16,7 +17,7 @@ import {
   WithdrawCall,
   Withdraw1Call,
   Withdraw2Call,
-  Vault as VaultContract,
+  Withdraw3Call,
   Deposit as DepositEvent,
   Withdraw as WithdrawEvent,
   StrategyAdded as StrategyAddedV1Event,
@@ -28,10 +29,9 @@ import {
 } from "../../generated/Registry_v1/Vault";
 import { _Deposit } from "../modules/Deposit";
 import { _Withdraw } from "../modules/Withdraw";
-import { enumToPrefix } from "../common/strings";
 import { strategyReported } from "../modules/Strategy";
-import { getOrCreateStrategy, getOrCreateVault } from "../common/initializers";
 import { Strategy as StrategyTemplate } from "../../generated/templates";
+import { getOrCreateStrategy, getOrCreateVault } from "../common/initializers";
 
 export function handleStrategyAdded_v1(event: StrategyAddedV1Event): void {
   const vaultAddress = event.address;
@@ -82,13 +82,20 @@ export function handleStrategyAdded_v2(event: StrategyAddedV2Event): void {
 }
 
 export function handleDeposit(call: DepositCall): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
-    let sharesMinted = call.outputs.value0;
+    const sharesMinted = call.outputs.value0;
 
-    _Deposit(call.to, call.transaction, call.block, vault, sharesMinted, null);
+    _Deposit(
+      vaultAddress,
+      call.transaction,
+      call.block,
+      vault,
+      sharesMinted,
+      constants.MAX_UINT256
+    );
   }
   updateFinancials(call.block);
   updateUsageMetrics(call.block, call.from);
@@ -96,21 +103,16 @@ export function handleDeposit(call: DepositCall): void {
 }
 
 export function handleDepositWithAmount(call: Deposit1Call): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
-
-  log.warning("[DepositWithAmount] vault: {}, shares: {}, deposit: {}", [
-    vaultAddress.toHexString(),
-    call.outputs.value0.toString(),
-    call.inputs._amount.toString(),
-  ]);
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
-    let sharesMinted = call.outputs.value0;
-    let depositAmount = call.inputs._amount;
+    const sharesMinted = call.outputs.value0;
+    const depositAmount = call.inputs._amount;
 
+    call.transaction
     _Deposit(
-      call.to,
+      vaultAddress,
       call.transaction,
       call.block,
       vault,
@@ -124,25 +126,15 @@ export function handleDepositWithAmount(call: Deposit1Call): void {
 }
 
 export function handleDepositWithAmountAndRecipient(call: Deposit2Call): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
-
-  log.warning(
-    "[DepositWithAmountAndRecipient] vault: {}, shares: {}, deposit: {}, TxnHash: {}",
-    [
-      vaultAddress.toHexString(),
-      call.outputs.value0.toString(),
-      call.inputs._amount.toString(),
-      call.transaction.hash.toHexString(),
-    ]
-  );
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
-    let sharesMinted = call.outputs.value0;
-    let depositAmount = call.inputs._amount;
+    const sharesMinted = call.outputs.value0;
+    const depositAmount = call.inputs._amount;
 
     _Deposit(
-      call.to,
+      vaultAddress,
       call.transaction,
       call.block,
       vault,
@@ -156,25 +148,19 @@ export function handleDepositWithAmountAndRecipient(call: Deposit2Call): void {
 }
 
 export function handleWithdraw(call: WithdrawCall): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
-    let vaultContract = VaultContract.bind(call.to);
     let withdrawAmount = call.outputs.value0;
-    let totalAssets = vaultContract.totalAssets();
-    let totalSupply = vaultContract.totalSupply();
-    let sharesBurnt = totalAssets.equals(constants.BIGINT_ZERO)
-      ? withdrawAmount
-      : withdrawAmount.times(totalSupply).div(totalAssets);
 
     _Withdraw(
-      call.to,
+      vaultAddress,
       call.transaction,
       call.block,
       vault,
       withdrawAmount,
-      sharesBurnt
+      constants.MAX_UINT256
     );
   }
   updateFinancials(call.block);
@@ -183,15 +169,15 @@ export function handleWithdraw(call: WithdrawCall): void {
 }
 
 export function handleWithdrawWithShares(call: Withdraw1Call): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
     const sharesBurnt = call.inputs._shares;
     const withdrawAmount = call.outputs.value0;
 
     _Withdraw(
-      call.to,
+      vaultAddress,
       call.transaction,
       call.block,
       vault,
@@ -207,15 +193,39 @@ export function handleWithdrawWithShares(call: Withdraw1Call): void {
 export function handleWithdrawWithSharesAndRecipient(
   call: Withdraw2Call
 ): void {
-  const vaultAddress = call.to;
-  const vault = getOrCreateVault(vaultAddress, call.block);
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
 
   if (vault) {
     const sharesBurnt = call.inputs._shares;
     const withdrawAmount = call.outputs.value0;
 
     _Withdraw(
-      call.to,
+      vaultAddress,
+      call.transaction,
+      call.block,
+      vault,
+      withdrawAmount,
+      sharesBurnt
+    );
+  }
+  updateFinancials(call.block);
+  updateUsageMetrics(call.block, call.from);
+  updateVaultSnapshots(vaultAddress, call.block);
+}
+
+export function handleWithdrawWithSharesAndRecipientAndLoss(
+  call: Withdraw3Call
+): void {
+  let vaultAddress = call.to;
+  let vault = getOrCreateVault(vaultAddress, call.block);
+
+  if (vault) {
+    const sharesBurnt = call.inputs.maxShares;
+    const withdrawAmount = call.outputs.value0;
+
+    _Withdraw(
+      vaultAddress,
       call.transaction,
       call.block,
       vault,
@@ -236,7 +246,7 @@ export function handleUpdatePerformanceFee(
 
   if (vault) {
     let performanceFeeId =
-      enumToPrefix(constants.VaultFeeType.PERFORMANCE_FEE) + vaultAddress;
+      utils.enumToPrefix(constants.VaultFeeType.PERFORMANCE_FEE) + vaultAddress;
     const performanceFee = VaultFeeStore.load(performanceFeeId);
 
     if (!performanceFee) {
@@ -263,7 +273,7 @@ export function handleUpdateManagementFee(
 
   if (vault) {
     let performanceFeeId =
-      enumToPrefix(constants.VaultFeeType.MANAGEMENT_FEE) + vaultAddress;
+      utils.enumToPrefix(constants.VaultFeeType.MANAGEMENT_FEE) + vaultAddress;
     const performanceFee = VaultFeeStore.load(performanceFeeId);
 
     if (!performanceFee) {
@@ -283,37 +293,43 @@ export function handleUpdateManagementFee(
 }
 
 export function handleStrategyReported_v1(
-  event: OldStrategyReportedEvent
-): void {
-  const vaultAddress = event.address;
-  const strategyAddress = event.params.strategy;
-
-  strategyReported(
-    event,
-    vaultAddress,
-    strategyAddress,
-    event.params.gain,
-    event.params.debtAdded,
-    event.params.debtPaid,
-    event.params.totalDebt
-  );
-}
-
-export function handleStrategyReported_v2(
   event: NewStrategyReportedEvent
 ): void {
   const vaultAddress = event.address;
   const strategyAddress = event.params.strategy;
 
   strategyReported(
+    event.params.gain,
+    constants.BIGINT_ZERO,
+    event.params.debtAdded,
+    event.params.totalDebt,
     event,
     vaultAddress,
-    strategyAddress,
-    event.params.gain,
-    event.params.debtAdded,
-    constants.BIGINT_ZERO,
-    event.params.totalDebt
+    strategyAddress
   );
+
+  updateFinancials(event.block);
+  updateVaultSnapshots(vaultAddress, event.block);
+}
+
+export function handleStrategyReported_v2(
+  event: OldStrategyReportedEvent
+): void {
+  const vaultAddress = event.address;
+  const strategyAddress = event.params.strategy;
+
+  strategyReported(
+    event.params.gain,
+    event.params.debtPaid,
+    event.params.debtAdded,
+    event.params.totalDebt,
+    event,
+    vaultAddress,
+    strategyAddress
+  );
+
+  updateFinancials(event.block);
+  updateVaultSnapshots(vaultAddress, event.block);
 }
 
 export function handleDepositEvent(event: DepositEvent): void {

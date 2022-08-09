@@ -1,5 +1,15 @@
 import { BigDecimal, BigInt } from "@graphprotocol/graph-ts";
 
+////////////////////
+///// Versions /////
+////////////////////
+
+export const PROTOCOL_NAME = "Liquity";
+export const PROTOCOL_SLUG = "liquity";
+export const PROTOCOL_SCHEMA_VERSION = "1.3.0";
+export const PROTOCOL_SUBGRAPH_VERSION = "1.1.4";
+export const PROTOCOL_METHODOLOGY_VERSION = "1.0.1";
+
 ////////////////////////
 ///// Schema Enums /////
 ////////////////////////
@@ -10,17 +20,24 @@ import { BigDecimal, BigInt } from "@graphprotocol/graph-ts";
 // https://thegraph.com/docs/en/hosted-service/what-is-hosted-service/#supported-networks-on-the-hosted-service
 export namespace Network {
   export const ARBITRUM_ONE = "ARBITRUM_ONE";
+  export const ARWEAVE_MAINNET = "ARWEAVE_MAINNET";
   export const AVALANCHE = "AVALANCHE";
+  export const BOBA = "BOBA";
   export const AURORA = "AURORA";
   export const BSC = "BSC"; // aka BNB Chain
   export const CELO = "CELO";
+  export const COSMOS = "COSMOS";
+  export const CRONOS = "CRONOS";
   export const MAINNET = "MAINNET"; // Ethereum mainnet
   export const FANTOM = "FANTOM";
   export const FUSE = "FUSE";
+  export const HARMONY = "HARMONY";
+  export const JUNO = "JUNO";
   export const MOONBEAM = "MOONBEAM";
   export const MOONRIVER = "MOONRIVER";
   export const NEAR_MAINNET = "NEAR_MAINNET";
   export const OPTIMISM = "OPTIMISM";
+  export const OSMOSIS = "OSMOSIS";
   export const MATIC = "MATIC"; // aka Polygon
   export const XDAI = "XDAI"; // aka Gnosis Chain
 }
@@ -68,7 +85,7 @@ export namespace RiskType {
 export namespace InterestRateType {
   export const STABLE = "STABLE";
   export const VARIABLE = "VARIABLE";
-  export const FIXED_TERM = "FIXED_TERM";
+  export const FIXED = "FIXED";
 }
 
 export namespace InterestRateSide {
@@ -102,6 +119,7 @@ export const USDC_DENOMINATOR = BigDecimal.fromString("1000000");
 export const BIGINT_ZERO = BigInt.fromI32(0);
 export const BIGINT_ONE = BigInt.fromI32(1);
 export const BIGINT_TWO = BigInt.fromI32(2);
+export const BIGINT_HUNDRED = BigInt.fromI32(100);
 export const BIGINT_THOUSAND = BigInt.fromI32(1000);
 export const BIGINT_MAX = BigInt.fromString(
   "115792089237316195423570985008687907853269984665640564039457584007913129639935"
@@ -116,6 +134,7 @@ export const INT_FOUR = 4 as i32;
 export const BIGDECIMAL_ZERO = new BigDecimal(BIGINT_ZERO);
 export const BIGDECIMAL_ONE = new BigDecimal(BIGINT_ONE);
 export const BIGDECIMAL_TWO = new BigDecimal(BIGINT_TWO);
+export const BIGDECIMAL_HUNDRED = new BigDecimal(BIGINT_HUNDRED);
 
 export const MAX_UINT = BigInt.fromI32(2).times(BigInt.fromI32(255));
 
@@ -156,6 +175,11 @@ export const LUSD_ADDRESS = "0x5f98805A4E8be255a32880FDeC7F6728C6568bA0";
 
 export const MINIMUM_COLLATERAL_RATIO = BigDecimal.fromString("1.1");
 
-export const MAXIMUM_LTV = BIGDECIMAL_ONE.div(MINIMUM_COLLATERAL_RATIO);
+export const MAXIMUM_LTV = BIGDECIMAL_ONE.div(MINIMUM_COLLATERAL_RATIO).times(
+  BIGDECIMAL_HUNDRED
+);
 
-export const LIQUIDATION_FEE = BigDecimal.fromString("0.05");
+export const LIQUIDATION_FEE_PERCENT = BigDecimal.fromString("0.5");
+export const LIQUIDATION_FEE = LIQUIDATION_FEE_PERCENT.div(BIGDECIMAL_HUNDRED);
+
+export const LIQUIDATION_RESERVE_LUSD = BigDecimal.fromString("200");
